@@ -1,0 +1,68 @@
+// deadlockoptimization :: BALANCED preset :: video.txt values
+//
+// These are the keys the in-game Video menu reads and writes. install.ps1
+// merges them into your existing video.txt and leaves your resolution,
+// refresh rate, monitor index, fullscreen mode and deviceid untouched.
+//
+// Hardware notes (5700X + 9070 XT):
+//   * gpu_level stays HIGH and texture mip bias stays 0. The 9070 XT has
+//     16 GB of VRAM and is not the bottleneck; dropping textures gains nothing.
+//   * cpu_level goes LOW. This is the engine's own CPU-side quality knob
+//     (cloth, particle sim budget, misc). It is the single most useful
+//     setting for a CPU-bound rig.
+//   * Shadows OFF. Shadow cascades are extra draw-call passes = CPU time.
+//   * Bloom, depth of field, motion blur OFF for visibility as much as fps.
+//   * Anti-aliasing stays ON and render quality stays 100%: both are nearly
+//     free on this GPU and lowering them would not raise your fps.
+//   * r_low_latency 1 enables AMD Anti-Lag 2 inside the game (the convar
+//     help text says so). Keep Anti-Lag enabled in Adrenalin too.
+
+"setting.cpu_level"                             "1"
+"setting.gpu_level"                             "3"
+"setting.mem_level"                             "2"
+"setting.gpu_mem_level"                         "2"
+"setting.shaderquality"                         "1"
+
+"setting.mat_vsync"                             "0"
+"setting.r_low_latency"                         "1"
+"setting.fps_max"                               "0"
+"setting.mat_viewportscale"                     "1.000000"
+
+"setting.r_citadel_antialiasing"                "1"
+"setting.r_citadel_upscaling"                   "0"
+"setting.r_citadel_fsr_rcas_sharpness"          "0.000000"
+"setting.r_citadel_fsr2_sharpness"              "0.000000"
+
+"setting.r_effects_bloom"                       "false"
+"setting.r_post_bloom"                          "false"
+"setting.r_depth_of_field"                      "false"
+"setting.r_citadel_motion_blur"                 "0"
+"setting.r_reduce_flash"                        "1"
+
+"setting.r_citadel_shadow_quality"              "0"
+"setting.r_citadel_distancefield_shadows"       "false"
+"setting.r_screen_space_shadows"                "false"
+"setting.csm_viewmodel_shadows"                 "0"
+
+"setting.r_citadel_ssao"                        "0"
+"setting.r_citadel_ssao_quality"                "0"
+"setting.r_citadel_distancefield_ao_quality"    "0"
+"setting.r_citadel_distancefield_reflections"   "false"
+"setting.r_citadel_mboit"                       "false"
+"setting.r_arealights"                          "false"
+"setting.r_area_lights"                         "0"
+
+"setting.r_citadel_fog_quality"                 "0"
+"setting.r_displacement_mapping"                "0"
+"setting.r_dashboard_render_quality"            "0"
+
+"setting.r_particle_max_detail_level"           "1"
+"setting.r_particle_shadows"                    "0"
+"setting.r_particle_cables_cast_shadows"        "0"
+"setting.r_particle_depth_feathering"           "false"
+"setting.r_citadel_half_res_noisy_effects"      "true"
+
+"setting.r_texture_stream_mip_bias"             "0"
+"setting.r_light_sensitivity_mode"              "false"
+"setting.r_citadel_outlines"                    "1"
+"setting.useadvanced"                           "1"

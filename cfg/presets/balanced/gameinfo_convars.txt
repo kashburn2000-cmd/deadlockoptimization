@@ -1,0 +1,70 @@
+		// ===================================================================
+		// deadlockoptimization :: BALANCED preset
+		// Target: Ryzen 7 5700X + Radeon RX 9070 XT
+		//
+		// On this hardware Deadlock is CPU-bound. The 9070 XT has headroom to
+		// spare, so this block spends its effort on things that cost CPU time:
+		// shadow cascades (extra draw-call passes), particle simulation,
+		// ragdolls, physics debris and the Panorama UI. GPU-only eye candy is
+		// left mostly alone so the game still looks like Deadlock.
+		//
+		// Every convar here is non-cheat and safe for matchmaking. Settings
+		// that are exposed in the in-game Video menu live in video.txt instead
+		// (see cfg/presets/balanced/video.txt), because video.txt is applied
+		// after this block and would override it anyway.
+		//
+		// This block is managed by install.ps1. Re-run the installer after a
+		// game patch if Valve overwrites gameinfo.gi.
+		// ===================================================================
+
+		// --- Sun / cascaded shadow maps (biggest CPU win) ---
+		csm_max_num_cascades_override               "1"      // 1 cascade instead of up to 4 (-1 = engine default)
+		csm_max_shadow_dist_override                "1024"   // metres of sun shadow before it fades (-1 = default)
+		lb_csm_override_staticgeo_cascades          "true"
+		lb_csm_override_staticgeo_cascades_value    "0"      // static world geometry only renders into cascade 0
+		csm_viewmodel_shadows                       "false"
+		lb_csm_draw_translucent                     "false"
+		lb_csm_draw_alpha_tested                    "false"
+
+		// --- Local light shadows ---
+		lb_enable_shadow_casting                    "false"  // stationary/dynamic lights stop casting shadow maps
+		lb_dynamic_shadow_resolution                "true"
+		lb_dynamic_shadow_resolution_base           "128"
+		lb_shadow_map_cull_empty_mixed              "true"
+		sc_disable_spotlight_shadows                "1"
+
+		// --- Particles: cheaper variants under load, bounded sim time ---
+		cl_particle_fallback_base                   "2"      // 0 = never fall back (default)
+		cl_particle_fallback_multiplier             "2"
+		cl_particle_sim_fallback_threshold_ms       "3"      // default 6 ms before new systems degrade
+		r_limit_particle_job_duration               "true"
+		r_particle_cables_cast_shadows              "false"
+		cl_aggregate_particles                      "1"
+
+		// --- Ragdolls / debris / cloth ---
+		cl_ragdoll_limit                            "0"      // ragdolls are pure CPU cost, no gameplay value
+		g_ragdoll_important_maxcount                "1"
+		func_break_max_pieces                       "1"
+		props_break_max_pieces_perframe             "1"
+		presettle_cloth_iterations                  "0"
+
+		// --- World detail ---
+		r_grass_quality                             "0"      // 0 off .. 4 ultra
+		sc_dithered_lod_transition_amt              "0"
+
+		// --- Panorama UI (runs on the CPU every frame) ---
+		panorama_disable_blur                       "true"
+		panorama_disable_box_shadow                 "true"
+		panorama_allow_transitions                  "false"
+		r_dashboard_render_quality                  "0"
+
+		// --- Fog volume resolution (GPU, but free to drop) ---
+		volume_fog_width                            "64"
+		volume_fog_height                           "64"
+		volume_fog_depth                            "32"
+
+		// --- Misc ---
+		r_citadel_drop_shadow_update_frequency      "0"
+		cl_phys_sleep_enable                        "1"
+		wind_system_temporal_smoothing              "false"
+		r_world_wind_strength                       "0"

@@ -1,0 +1,109 @@
+		// ===================================================================
+		// deadlockoptimization :: MAXFPS preset
+		// Target: Ryzen 7 5700X + Radeon RX 9070 XT
+		//
+		// Everything in BALANCED plus harder cuts: props and outlines culled
+		// closer, particle detail at minimum, decals faded instantly, clutter
+		// meshes gone, hair/morph/cloth extras off. The map looks flatter.
+		// Baked lighting is kept so you can still read corners and shadows.
+		//
+		// Every convar here is non-cheat and safe for matchmaking. Menu-exposed
+		// settings live in video.txt. Managed by install.ps1.
+		// ===================================================================
+
+		// --- Sun / cascaded shadow maps ---
+		csm_max_num_cascades_override               "0"
+		csm_max_shadow_dist_override                "0"
+		lb_csm_override_staticgeo_cascades          "true"
+		lb_csm_override_staticgeo_cascades_value    "0"
+		csm_viewmodel_shadows                       "false"
+		lb_csm_draw_translucent                     "false"
+		lb_csm_draw_alpha_tested                    "false"
+		csm_max_visible_dist                        "1"
+		csm_sst_max_visible_dist                    "1"
+
+		// --- Local light shadows ---
+		lb_enable_shadow_casting                    "false"
+		lb_allow_time_sliced_shadow_map_rendering   "false"
+		lb_dynamic_shadow_resolution                "true"
+		lb_dynamic_shadow_resolution_base           "32"
+		lb_shadow_map_cull_empty_mixed              "true"
+		sc_disable_spotlight_shadows                "1"
+		r_citadel_shadowdb                          "0"
+
+		// --- Particles ---
+		cl_particle_fallback_base                   "3"
+		cl_particle_fallback_multiplier             "3"
+		cl_particle_sim_fallback_threshold_ms       "1"
+		r_limit_particle_job_duration               "true"
+		r_particle_cables_cast_shadows              "false"
+		r_particle_cables_render                    "false"
+		cl_aggregate_particles                      "1"
+		cl_particle_batch_mode                      "1"
+		r_RainParticleDensity                       "0"
+
+		// --- Ragdolls / debris / cloth / animation extras ---
+		cl_ragdoll_limit                            "0"
+		g_ragdoll_important_maxcount                "1"
+		func_break_max_pieces                       "1"
+		props_break_max_pieces_perframe             "0.1"
+		presettle_cloth_iterations                  "0"
+		enable_boneflex                             "false"
+		r_morphing_enabled                          "false"
+		r_smooth_morph_normals                      "0"
+		r_hair_ao                                   "0"
+		r_hair_indirect_transmittance               "false"
+		r_hair_shadowtile                           "false"
+		animgraph_footlock_enabled                  "false"
+		animgraph_slowdownonslopes_enabled          "false"
+
+		// --- World detail / culling ---
+		r_propsmaxdist                              "800"    // default 1200
+		r_citadel_npr_outlines_max_dist             "600"    // outline distance, default 1000
+		r_grass_quality                             "0"
+		sc_clutter_density_none_size                "0.1"
+		sc_clutter_density_full_size                "0.5"
+		sc_instanced_mesh_size_cull_bias            "10"
+		sc_dithered_lod_transition_amt              "0"
+		r_drawropes                                 "0"
+		r_ropetranslucent                           "0"
+		rope_subdiv                                 "0"
+
+		// --- Decals / impacts ---
+		r_decals                                    "256"    // default 2048
+		r_decals_default_fade_duration              "0.001"
+		r_decals_default_start_fade                 "0.001"
+		citadel_per_weapon_per_surface_impact_effects "false"
+		r_character_decal_resolution                "256"
+		r_muzzleflashbrightness                     "0.01"
+
+		// --- Panorama UI ---
+		panorama_disable_blur                       "true"
+		panorama_disable_box_shadow                 "true"
+		panorama_allow_transitions                  "false"
+		panorama_use_new_occlusion_invalidation     "1"
+		r_dashboard_render_quality                  "0"
+
+		// --- Fog ---
+		fog_enable                                  "0"
+		volume_fog_width                            "32"
+		volume_fog_height                           "32"
+		volume_fog_depth                            "16"
+		volume_fog_intermediate_textures_hdr        "0"
+
+		// --- Misc ---
+		r_citadel_drop_shadow_update_frequency      "0"
+		cl_phys_sleep_enable                        "1"
+		wind_system_temporal_smoothing              "false"
+		wind_system_default_resolution_xy           "64"
+		r_world_wind_strength                       "0"
+		mat_tonemap_bloom_scale                     "0"
+		cl_retire_low_priority_lights               "1"
+		mat_max_lighting_complexity                 "1"
+		thumper_use_plane_reflection                "false"
+		sc_cache_envmap_lpv_lookup                  "false"
+
+		// --- Optional nuclear option (uncomment at your own risk) ---
+		// Turns off baked lightmaps. Big CPU and GPU drop but the whole map
+		// goes flat and corners get harder to read. Most players hate it.
+		// sc_disable_baked_lighting                "true"
