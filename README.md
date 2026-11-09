@@ -121,6 +121,25 @@ Things worth A/B testing on your own machine, in the autoexec:
 - `-vulkan` in launch options. Source 2's Vulkan path has less driver overhead on AMD and can
   help when CPU-bound, but it's had stability problems in Deadlock. Experiment, don't default to it.
 
+## Brightness switcher (bonus)
+
+`brightness\` is a tiny two-button app: **Normal** and **Night**, for when someone in the room
+has gone to bed. Double-click `brightness\Brightness.vbs` (no console flash) or `Brightness.bat`.
+Make a shortcut to the .vbs and pin it if you want it one click from the taskbar.
+
+Each button pushes a saved level to every connected monitor over DDC/CI, which is the monitor's
+real hardware brightness, same as pressing the buttons on the bezel. Edit the two levels in the
+window; they're saved to `brightness\brightness.json`. Keys: `1`/`N` Normal, `2`/`G` Night, `Esc`
+closes. If a monitor doesn't respond, DDC/CI is probably off in its OSD menu. Laptops fall back to
+WMI, and as a last resort it dims the primary display with a gamma ramp (Windows caps that at 50%).
+
+For a hotkey, Stream Deck, or Task Scheduler at 11pm:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\brightness\brightness.ps1 -Set night
+powershell -ExecutionPolicy Bypass -File .\brightness\brightness.ps1 -Set normal
+```
+
 ## Linux / Steam Deck
 
 `install.ps1` runs under PowerShell 7 (`pwsh`) on Linux too and knows the usual Steam paths
