@@ -14,14 +14,23 @@
       2. WMI (WmiMonitorBrightnessMethods). Laptop and all-in-one panels.
       3. Gamma ramp (gdi32.dll). Software dim of the primary display. Always works, but Windows
          won't accept a ramp darker than about 50% unless the GdiICMGammaRange registry value is
-         relaxed, so Night gets clamped there.
+         relaxed (see -UnlockGamma), so it gets clamped there.
+
+    Dimmer than the monitor's 0%: a level below 0 means "monitor at 0, then dim the rest in
+    software". -30 is monitor 0% plus a 30% gamma dim. Without -UnlockGamma the floor is -50;
+    with it, -90. The software part only covers the primary display and a game running in
+    exclusive fullscreen may override it (borderless is fine).
 
 .PARAMETER Set
     Apply a preset ("normal" or "night") and exit without showing the window. Handy for a
     hotkey, a Stream Deck button, or Task Scheduler.
 
 .PARAMETER Level
-    Apply an explicit 0-100 level and exit without showing the window.
+    Apply an explicit level (-90 to 100) and exit without showing the window.
+
+.PARAMETER UnlockGamma
+    Set the GdiICMGammaRange registry value so Windows accepts gamma ramps darker than 50%.
+    Needs an admin PowerShell and a reboot. Run once, then Night can go down to -90.
 
 .PARAMETER ConfigPath
     Where to keep the saved levels. Defaults to brightness.json next to this script.
@@ -29,15 +38,18 @@
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -STA -File .\brightness.ps1
     powershell -ExecutionPolicy Bypass -File .\brightness.ps1 -Set night
-    powershell -ExecutionPolicy Bypass -File .\brightness.ps1 -Level 40
+    powershell -ExecutionPolicy Bypass -File .\brightness.ps1 -Level -30
+    powershell -ExecutionPolicy Bypass -File .\brightness.ps1 -UnlockGamma     # from an admin PowerShell
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('normal', 'night')]
     [string]$Set,
 
-    [ValidateRange(0, 100)]
+    [ValidateRange(-90, 100)]
     [int]$Level,
+
+    [switch]$UnlockGamma,
 
     [string]$ConfigPath
 )
@@ -190,13 +202,24 @@ public static class Dimmer
 $script:Cfg = [ordered]@{ normal = 70; night = 10; method = 'auto' }
 $script:Methods = @('auto', 'ddc', 'wmi', 'gamma')
 
+# Windows rejects gamma ramps below ~50% unless GdiICMGammaRange is set to 256 (then ~10% is safe).
+$script:GammaRegKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM'
+function Test-GammaUnlocked {
+    try {
+        $v = (Get-ItemProperty -LiteralPath $script:GammaRegKey -Name GdiICMGammaRange -ErrorAction Stop).GdiICMGammaRange
+        return ([int]$v -ge 256)
+    } catch { return $false }
+}
+$script:GammaFloor = if (Test-GammaUnlocked) { 10 } else { 50 }
+$script:MinLevel   = $script:GammaFloor - 100   # -90 unlocked, -50 otherwise
+
 function Read-Config {
     if (-not (Test-Path -LiteralPath $ConfigPath)) { return }
     try {
         $json = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
         foreach ($k in @('normal', 'night')) {
             $p = $json.PSObject.Properties[$k]
-            if ($p -and $p.Value -is [ValueType]) { $script:Cfg[$k] = [Math]::Max(0, [Math]::Min(100, [int]$p.Value)) }
+            if ($p -and $p.Value -is [ValueType]) { $script:Cfg[$k] = [Math]::Max($script:MinLevel, [Math]::Min(100, [int]$p.Value)) }
         }
         $m = $json.PSObject.Properties['method']
         if ($m -and ($script:Methods -contains [string]$m.Value)) { $script:Cfg.method = [string]$m.Value }
@@ -227,31 +250,40 @@ function Get-WmiBrightness {
     return -1
 }
 
+# Applies the software (gamma) part of a level: 100 = no dim. Returns a note for the status line.
+function Set-SoftDim([int]$Soft) {
+    $p = [Math]::Max($script:GammaFloor, $Soft)
+    if (-not [Dimmer]::GammaSet($p)) { return ' (software dim failed)' }
+    if ($p -ne $Soft) { return " + software dim capped at $(100 - $p)%, run -UnlockGamma for more" }
+    if ($p -lt 100) { return " + $(100 - $p)% software dim" }
+    return ''
+}
+
 # Returns a short description of the method that worked. Throws if nothing did.
+# Percent below 0 means hardware 0 plus a software dim of that much.
 function Set-Brightness([int]$Percent, [string]$Method) {
+    $hw   = [Math]::Max(0, $Percent)
+    $soft = 100 + [Math]::Min(0, $Percent)
     if ($Method -in @('auto', 'ddc')) {
-        $n = [Dimmer]::DdcSet($Percent)
+        $n = [Dimmer]::DdcSet($hw)
         if ($n -gt 0) {
-            $null = [Dimmer]::GammaSet(100)   # clear any software dim left from a gamma fallback
             $s = if ($n -eq 1) { '' } else { 's' }
-            return "DDC/CI ($n monitor$s)"
+            return "DDC/CI ($n monitor$s)" + (Set-SoftDim $soft)
         }
         if ($Method -eq 'ddc') { throw 'No monitor answered DDC/CI. Turn DDC/CI on in the monitor OSD, or pick another method.' }
     }
     if ($Method -in @('auto', 'wmi')) {
         try {
-            if (Set-WmiBrightness $Percent) {
-                $null = [Dimmer]::GammaSet(100)
-                return 'WMI'
-            }
+            if (Set-WmiBrightness $hw) { return 'WMI' + (Set-SoftDim $soft) }
         } catch {
             if ($Method -eq 'wmi') { throw "WMI brightness not available on this machine. ($($_.Exception.Message))" }
         }
     }
     if ($Method -in @('auto', 'gamma')) {
-        $p = [Math]::Max(50, $Percent)
+        # No hardware control at all, so the level itself is the software dim (negatives just hit the floor).
+        $p = [Math]::Max($script:GammaFloor, $hw)
         if ([Dimmer]::GammaSet($p)) {
-            if ($p -ne $Percent) { return "gamma ramp (Windows caps it at $p%)" }
+            if ($p -ne $hw) { return "gamma ramp (Windows caps it at $p%, run -UnlockGamma for more)" }
             return 'gamma ramp'
         }
     }
@@ -268,6 +300,15 @@ function Get-Brightness {
 # CLI mode: apply and exit
 # ----------------------------------------------------------------------------
 Read-Config
+
+if ($UnlockGamma) {
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) { throw '-UnlockGamma writes to HKLM. Right-click PowerShell, "Run as administrator", then run this again.' }
+    if (-not (Test-Path -LiteralPath $script:GammaRegKey)) { $null = New-Item -Path $script:GammaRegKey -Force }
+    Set-ItemProperty -LiteralPath $script:GammaRegKey -Name GdiICMGammaRange -Value 256 -Type DWord
+    Write-Host 'GdiICMGammaRange set to 256. Reboot, then Night can go down to -90.'
+    return
+}
 
 if ($Set -or $PSBoundParameters.ContainsKey('Level')) {
     $target = if ($Set) { [int]$script:Cfg[$Set] } else { $Level }
@@ -332,7 +373,7 @@ function New-Label([string]$Text, [int]$X, [int]$Y, [int]$W) {
 
 function New-Spinner([int]$Value, [int]$X, [int]$Y) {
     $n = New-Object System.Windows.Forms.NumericUpDown
-    $n.Minimum   = 0
+    $n.Minimum   = $script:MinLevel   # below 0 = monitor at 0 plus a software dim
     $n.Maximum   = 100
     $n.Value     = $Value
     $n.Location  = New-Object System.Drawing.Point($X, $Y)

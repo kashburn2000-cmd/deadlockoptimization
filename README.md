@@ -133,6 +133,17 @@ window; they're saved to `brightness\brightness.json`. Keys: `1`/`N` Normal, `2`
 closes. If a monitor doesn't respond, DDC/CI is probably off in its OSD menu. Laptops fall back to
 WMI, and as a last resort it dims the primary display with a gamma ramp (Windows caps that at 50%).
 
+Dimmer than the monitor's 0%: set Night below zero. `-30` means monitor at 0% plus a 30%
+software dim (a gamma ramp on top). Windows caps the software part at 50% out of the box; to go
+further, run this once from an admin PowerShell and reboot, after which Night goes down to `-90`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\brightness\brightness.ps1 -UnlockGamma
+```
+
+The software dim only covers the primary display, and a game in exclusive fullscreen may replace
+the gamma ramp with its own (borderless windowed is fine).
+
 For a hotkey, Stream Deck, or Task Scheduler at 11pm:
 
 ```powershell
