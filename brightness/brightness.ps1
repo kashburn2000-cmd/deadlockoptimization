@@ -49,6 +49,15 @@ if (($PSVersionTable.PSVersion.Major -ge 6) -and -not $IsWindows) {
     throw 'brightness.ps1 is Windows-only (it uses dxva2/gdi32 and WinForms).'
 }
 
+# The launchers run this with the console hidden, so an error would otherwise vanish.
+# Any unhandled error pops a message box instead.
+Add-Type -AssemblyName System.Windows.Forms
+trap {
+    $msg = "$($_.Exception.Message)`r`n`r`nAt line $($_.InvocationInfo.ScriptLineNumber): $("$($_.InvocationInfo.Line)".Trim())"
+    [void][System.Windows.Forms.MessageBox]::Show($msg, 'brightness.ps1 crashed', 'OK', 'Error')
+    break
+}
+
 # ----------------------------------------------------------------------------
 # Native monitor access (DDC/CI + gamma ramp)
 # ----------------------------------------------------------------------------
@@ -268,7 +277,6 @@ if ($Set -or $PSBoundParameters.ContainsKey('Level')) {
 # ----------------------------------------------------------------------------
 # GUI
 # ----------------------------------------------------------------------------
-Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
