@@ -117,8 +117,41 @@ public static class Dimmer
     private static extern IntPtr GetDC(IntPtr hWnd);
     [DllImport("user32.dll")]
     private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
-    [DllImport("gdi32.dll")]
+    [DllImport("gdi32.dll", SetLastError = true)]
     private static extern bool SetDeviceGammaRamp(IntPtr hDC, ref RAMP ramp);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateDC(string driver, string device, string output, IntPtr initData);
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteDC(IntPtr hdc);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool EnumDisplayDevices(string device, uint iDevNum, ref DISPLAY_DEVICE dd, uint flags);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLong(IntPtr hWnd, int index);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowLong(IntPtr hWnd, int index, int value);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DISPLAY_DEVICE
+    {
+        public int cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]  public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
+    }
+
+    // Win32 error from the last failed SetDeviceGammaRamp (0 usually means "ramp out of allowed range").
+    public static int LastGammaError = 0;
+
+    // Makes a window click-through and non-activating (for the dim overlay).
+    public static void MakeClickThrough(IntPtr hWnd)
+    {
+        const int GWL_EXSTYLE = -20;
+        const int WS_EX_TRANSPARENT = 0x20, WS_EX_LAYERED = 0x80000, WS_EX_TOOLWINDOW = 0x80, WS_EX_NOACTIVATE = 0x08000000;
+        int ex = GetWindowLong(hWnd, GWL_EXSTYLE);
+        SetWindowLong(hWnd, GWL_EXSTYLE, ex | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+    }
 
     private static List<IntPtr> GetHMonitors()
     {
@@ -178,19 +211,48 @@ public static class Dimmer
         return result;
     }
 
-    // Software dim via gamma ramp. 100 = identity (undoes any earlier dim).
-    public static bool GammaSet(int percent)
+    // Software dim via gamma ramp on every attached display. 100 = identity (undoes any earlier dim).
+    // Returns how many displays accepted it.
+    public static int GammaSet(int percent)
     {
         double scale = Math.Max(0, Math.Min(100, percent)) / 100.0;
         var ramp = new RAMP { Red = new ushort[256], Green = new ushort[256], Blue = new ushort[256] };
         for (int i = 0; i < 256; i++)
         {
-            ushort v = (ushort)Math.Min(65535, (int)Math.Round(i * 257 * scale));
+            ushort v = (ushort)Math.Min(65535, (int)Math.Round(i * 256 * scale));
             ramp.Red[i] = v; ramp.Green[i] = v; ramp.Blue[i] = v;
         }
-        IntPtr dc = GetDC(IntPtr.Zero);
-        try { return SetDeviceGammaRamp(dc, ref ramp); }
-        finally { ReleaseDC(IntPtr.Zero, dc); }
+        LastGammaError = 0;
+        int ok = 0;
+        var dd = new DISPLAY_DEVICE();
+        dd.cb = Marshal.SizeOf(dd);
+        for (uint i = 0; EnumDisplayDevices(null, i, ref dd, 0); i++)
+        {
+            string name = dd.DeviceName;
+            int flags = dd.StateFlags;
+            dd = new DISPLAY_DEVICE();
+            dd.cb = Marshal.SizeOf(dd);
+            if ((flags & 1) == 0) continue;   // DISPLAY_DEVICE_ATTACHED_TO_DESKTOP
+            IntPtr dc = CreateDC(null, name, null, IntPtr.Zero);
+            if (dc == IntPtr.Zero) continue;
+            try
+            {
+                if (SetDeviceGammaRamp(dc, ref ramp)) ok++;
+                else LastGammaError = Marshal.GetLastWin32Error();
+            }
+            finally { DeleteDC(dc); }
+        }
+        if (ok == 0)
+        {
+            IntPtr dc = GetDC(IntPtr.Zero);
+            try
+            {
+                if (SetDeviceGammaRamp(dc, ref ramp)) ok++;
+                else LastGammaError = Marshal.GetLastWin32Error();
+            }
+            finally { ReleaseDC(IntPtr.Zero, dc); }
+        }
+        return ok;
     }
 }
 '@
@@ -250,13 +312,53 @@ function Get-WmiBrightness {
     return -1
 }
 
-# Applies the software (gamma) part of a level: 100 = no dim. Returns a note for the status line.
+# Fallback for when Windows refuses the gamma ramp (HDR on, driver says no): a click-through,
+# non-activating black window over the whole desktop whose opacity is the dim amount. Only
+# lives while this process does, which is why the window hides to the tray instead of exiting.
+$script:Overlay  = $null
+$script:MainForm = $null
+$script:GuiMode  = $false
+function Set-Overlay([int]$DimPercent) {
+    if ($DimPercent -le 0) {
+        if ($script:Overlay) { $script:Overlay.Close(); $script:Overlay.Dispose(); $script:Overlay = $null }
+        return
+    }
+    if (-not $script:Overlay) {
+        $o = New-Object System.Windows.Forms.Form
+        $o.FormBorderStyle = 'None'
+        $o.ShowInTaskbar   = $false
+        $o.TopMost         = $true
+        $o.StartPosition   = 'Manual'
+        $o.BackColor       = [System.Drawing.Color]::Black
+        $o.Bounds          = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        $o.Opacity         = 0.01
+        $o.Show()
+        $script:Overlay = $o
+        if ($script:MainForm) { $script:MainForm.Activate() }
+    }
+    $script:Overlay.Opacity = [Math]::Min(0.95, $DimPercent / 100.0)
+    [Dimmer]::MakeClickThrough($script:Overlay.Handle)
+}
+
+# Applies the software part of a level: 100 = no dim. Returns a note for the status line.
 function Set-SoftDim([int]$Soft) {
+    if ($Soft -ge 100) {
+        $null = [Dimmer]::GammaSet(100)
+        Set-Overlay 0
+        return ''
+    }
     $p = [Math]::Max($script:GammaFloor, $Soft)
-    if (-not [Dimmer]::GammaSet($p)) { return ' (software dim failed)' }
-    if ($p -ne $Soft) { return " + software dim capped at $(100 - $p)%, run -UnlockGamma for more" }
-    if ($p -lt 100) { return " + $(100 - $p)% software dim" }
-    return ''
+    if ([Dimmer]::GammaSet($p) -gt 0) {
+        Set-Overlay 0
+        if ($p -ne $Soft) { return " + software dim capped at $(100 - $p)%, run -UnlockGamma for more" }
+        return " + $(100 - $p)% software dim"
+    }
+    $err = [Dimmer]::LastGammaError
+    if ($script:GuiMode) {
+        Set-Overlay (100 - $Soft)
+        return " + $(100 - $Soft)% overlay dim (gamma refused, error $err)"
+    }
+    return " (software dim failed, gamma error $err; the window has an overlay fallback)"
 }
 
 # Returns a short description of the method that worked. Throws if nothing did.
@@ -282,9 +384,14 @@ function Set-Brightness([int]$Percent, [string]$Method) {
     if ($Method -in @('auto', 'gamma')) {
         # No hardware control at all, so the level itself is the software dim (negatives just hit the floor).
         $p = [Math]::Max($script:GammaFloor, $hw)
-        if ([Dimmer]::GammaSet($p)) {
+        if ([Dimmer]::GammaSet($p) -gt 0) {
+            Set-Overlay 0
             if ($p -ne $hw) { return "gamma ramp (Windows caps it at $p%, run -UnlockGamma for more)" }
             return 'gamma ramp'
+        }
+        if ($script:GuiMode) {
+            Set-Overlay (100 - $hw)
+            return "overlay dim $(100 - $hw)% (gamma refused, error $([Dimmer]::LastGammaError))"
         }
     }
     throw "Couldn't set brightness with method '$Method'."
@@ -322,6 +429,8 @@ if ($Set -or $PSBoundParameters.ContainsKey('Level')) {
 # ----------------------------------------------------------------------------
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
+$script:GuiMode = $true
+$script:Quit    = $false
 
 $bg       = [System.Drawing.Color]::FromArgb(24, 24, 28)
 $panel    = [System.Drawing.Color]::FromArgb(40, 40, 46)
@@ -341,6 +450,7 @@ $form.BackColor       = $bg
 $form.ForeColor       = $fg
 $form.Font            = New-Object System.Drawing.Font('Segoe UI', 10)
 $form.KeyPreview      = $true
+$script:MainForm = $form
 
 function New-BigButton([string]$Text, [int]$X, [System.Drawing.Color]$Accent) {
     $b = New-Object System.Windows.Forms.Button
@@ -466,6 +576,32 @@ $form.Add_KeyDown({
 
 Update-ButtonText
 
+# Tray icon. The window hides here instead of exiting while an overlay dim is active,
+# because the overlay dies with the process.
+function Show-Main { $form.Show(); $form.WindowState = 'Normal'; $form.Activate() }
+
+$tray = New-Object System.Windows.Forms.NotifyIcon
+$tray.Text = 'Brightness'
+$tray.Icon = try { [System.Drawing.Icon]::ExtractAssociatedIcon((Get-Process -Id $PID).Path) } catch { [System.Drawing.SystemIcons]::Application }
+$menu = New-Object System.Windows.Forms.ContextMenuStrip
+[void]$menu.Items.Add('Normal', $null, { Invoke-Preset 'normal' })
+[void]$menu.Items.Add('Night',  $null, { Invoke-Preset 'night' })
+[void]$menu.Items.Add('Show window', $null, { Show-Main })
+[void]$menu.Items.Add('-')
+[void]$menu.Items.Add('Exit', $null, { $script:Quit = $true; $form.Close() })
+$tray.ContextMenuStrip = $menu
+$tray.Add_MouseClick({ param($s, $e) if ($e.Button -eq 'Left') { Show-Main } })
+$tray.Visible = $true
+
+$form.Add_FormClosing({
+    param($s, $e)
+    if (-not $script:Quit -and $script:Overlay -and $e.CloseReason -eq 'UserClosing') {
+        $e.Cancel = $true
+        $form.Hide()
+        $tray.ShowBalloonTip(3000, 'Brightness', 'Still dimming from the tray. Right-click the icon to exit.', 'Info')
+    }
+})
+
 $form.Add_Shown({
     $btnNormal.Focus() | Out-Null
     $cur = Get-Brightness
@@ -478,5 +614,8 @@ $form.Add_Shown({
     }
 })
 
-[void]$form.ShowDialog()
+[System.Windows.Forms.Application]::Run($form)
+$tray.Visible = $false
+$tray.Dispose()
+Set-Overlay 0
 $form.Dispose()

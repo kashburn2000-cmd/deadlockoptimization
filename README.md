@@ -141,8 +141,11 @@ further, run this once from an admin PowerShell and reboot, after which Night go
 powershell -ExecutionPolicy Bypass -File .\brightness\brightness.ps1 -UnlockGamma
 ```
 
-The software dim only covers the primary display, and a game in exclusive fullscreen may replace
-the gamma ramp with its own (borderless windowed is fine).
+If Windows refuses the gamma ramp (it does with HDR on, and some drivers just say no), the app
+falls back to a click-through black overlay at the same opacity. That overlay only exists while
+the app is running, so closing the window while it's active hides it to the tray instead of
+quitting; right-click the tray icon to exit. A game in exclusive fullscreen can bypass both the
+gamma ramp and the overlay (borderless windowed is fine).
 
 For a hotkey, Stream Deck, or Task Scheduler at 11pm:
 
