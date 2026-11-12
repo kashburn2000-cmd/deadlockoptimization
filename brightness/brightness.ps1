@@ -39,11 +39,13 @@ param(
     [ValidateRange(0, 100)]
     [int]$Level,
 
-    [string]$ConfigPath = (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'brightness.json')
+    [string]$ConfigPath
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+
+if (-not $ConfigPath) { $ConfigPath = Join-Path $PSScriptRoot 'brightness.json' }
 
 if (($PSVersionTable.PSVersion.Major -ge 6) -and -not $IsWindows) {
     throw 'brightness.ps1 is Windows-only (it uses dxva2/gdi32 and WinForms).'
